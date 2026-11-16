@@ -8,6 +8,14 @@ const { Store, uid } = require('./store');
 const paster = require('./paster');
 
 const START_HIDDEN = process.argv.includes('--hidden');
+let logFile = null;
+function log(...a) {
+  try {
+    if (!logFile) logFile = path.join(app.getPath('userData'), 'waddlesnap.log');
+    const line = `[${new Date().toISOString()}] ` + a.map(x => (typeof x === 'string' ? x : JSON.stringify(x))).join(' ') + '\n';
+    fs.appendFileSync(logFile, line);
+  } catch { /* logging must never break the app */ }
+}
 const R = (...p) => path.join(__dirname, ...p);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -120,9 +128,22 @@ async function clipboardIsEmpty() {
 
 /* ───────────────────────── capture ───────────────────────── */
 
-async function captureDisplay(display) {
+// Exact physical pixel size of a display. Electron's DIP sizes are rounded, so
+// size * scaleFactor can be off by one (2560 px at 150% -> 1707 DIP -> 2561 px),
+// which would make the capture get resampled. On Windows ask the OS directly.
+function physicalSize(display) {
+  if (process.platform === 'win32' && typeof screen.dipToScreenRect === 'function') {
+    try {
+      const r = screen.dipToScreenRect(null, display.bounds);
+      if (r && r.width > 0 && r.height > 0) return { width: r.width, height: r.height };
+    } catch { /* fall back below */ }
+  }
   const sf = display.scaleFactor || 1;
-  const want = { width: Math.round(display.size.width * sf), height: Math.round(display.size.height * sf) };
+  return { width: Math.round(display.bounds.width * sf), height: Math.round(display.bounds.height * sf) };
+}
+
+async function captureDisplay(display) {
+  const want = physicalSize(display);
   const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: want, fetchWindowIcons: false });
   if (!sources.length) throw new Error('No screens available to capture');
   let src = sources.find(s => s.display_id && String(s.display_id) === String(display.id));
@@ -169,7 +190,11 @@ async function startSnap(mode, opts = {}) {
     if (ow.isDestroyed()) throw new Error('overlay closed');
 
     const size = image.getSize();
-    const scale = size.width / display.bounds.width; // image pixels per screen DIP
+    // image pixels per CSS px in the overlay: the display's scale factor when the
+    // capture came back at full physical resolution (the normal case)
+    const phys = physicalSize(display);
+    const scale = (display.scaleFactor || 1) * (size.width / phys.width);
+    log('capture', { bounds: display.bounds, sf: display.scaleFactor, phys, img: size, scale });
     Object.assign(snap, { display, image, scale });
 
     const st = store.get();
@@ -185,6 +210,7 @@ async function startSnap(mode, opts = {}) {
     });
   } catch (e) {
     console.error('snap failed', e);
+    log('snap failed', String(e && e.stack || e));
     endSnap();
     toast({ kind: 'warn', title: 'Snap failed', text: String(e.message || e).slice(0, 120) });
   }
@@ -235,6 +261,7 @@ ipcMain.on('overlay:done', async (_e, res) => {
     await deliver(out, { w, h, name: preset ? preset.name : (res.savePresetName || 'Free snap') });
   } catch (e) {
     console.error(e);
+    log('deliver failed', String(e && e.stack || e));
     toast({ kind: 'warn', title: 'Could not save', text: String(e.message || e).slice(0, 120) });
   } finally {
     endSnap();
@@ -293,6 +320,7 @@ async function doSuperPaste() {
     return;
   }
   const res = await paster.superPaste({ ...st.superPaste, hotkeyVk: paster.acceleratorVk(st.hotkeys.superPaste) });
+  log('super paste', res);
   if (res.ok) {
     const sep = { enter: ' with Enter', tab: ' with Tab', space: ' with spaces' }[st.superPaste.separator] || '';
     toast({ kind: 'paste', title: `Pasted ×${res.count}!`, text: `One hotkey, ${res.count} pastes${sep}.`, count: res.count, ms: 1800 });
@@ -320,6 +348,7 @@ function registerHotkeys() {
     try { ok = globalShortcut.register(accel, ACTIONS[name]); } catch { ok = false; }
     if (!ok) hotkeyFailures.push(name);
   }
+  if (hotkeyFailures.length) log('hotkeys unavailable', hotkeyFailures.map(n => `${n}=${st.hotkeys[n]}`));
   return hotkeyFailures;
 }
 
@@ -473,6 +502,8 @@ ipcMain.on('toast:click', (_e, file) => {
 
 app.whenReady().then(() => {
   store = new Store();
+  log('start', { version: app.getVersion(), platform: process.platform, os: require('os').release(), electron: process.versions.electron,
+    displays: screen.getAllDisplays().map(d => ({ bounds: d.bounds, sf: d.scaleFactor })) });
   createMain();
   createToastWindow();
   buildTray();

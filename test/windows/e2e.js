@@ -12,8 +12,10 @@ const fs = require('fs');
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = path.join(ROOT, 'test', 'out');
 const SHOTS = path.join(OUT, 'shots');
-const TOOL = path.join(__dirname, 'bin', 'wintool.exe');
-const EXE = path.join(process.env.LOCALAPPDATA, 'Programs', 'WaddleSnap', 'WaddleSnap.exe');
+// Overridable so the harness itself can be dry-run on Linux before spending a Windows CI run.
+const TOOL = process.env.WINTOOL || path.join(__dirname, 'bin', 'wintool.exe');
+const EXE = process.env.WADDLE_EXE || path.join(process.env.LOCALAPPDATA || '', 'Programs', 'WaddleSnap', 'WaddleSnap.exe');
+const BASE_ARGS = process.env.WADDLE_ARGS ? process.env.WADDLE_ARGS.split(' ') : [];
 fs.mkdirSync(SHOTS, { recursive: true });
 
 const VK = { CTRL: 0x11, ALT: 0x12, SHIFT: 0x10, ENTER: 0x0D, ESC: 0x1B, S: 0x53, F: 0x46, P: 0x50, V: 0x56, D3: 0x33, D1: 0x31 };
@@ -94,7 +96,7 @@ async function step(name, fn, ms = 120000) {
 }
 
 async function launch(extraArgs = []) {
-  const app = await _electron.launch({ executablePath: EXE, args: extraArgs, timeout: 90000 });
+  const app = await _electron.launch({ executablePath: EXE, args: [...BASE_ARGS, ...extraArgs], timeout: 90000 });
   app.process().stderr.on('data', d => { const s = String(d); if (/error|exception|fail/i.test(s) && !/gpu|dbus|viz|crashpad|WSALookupService|network_change/i.test(s)) logLines.push('[app stderr] ' + s.trim()); });
   app.process().stdout.on('data', d => logLines.push('[app stdout] ' + String(d).trim()));
   await app.firstWindow({ timeout: 60000 });
@@ -334,7 +336,8 @@ async function freeSnapTest(app, win, tag, saveName) {
   let notepad = null;
   await step('super paste into Notepad (×4, Enter between)', async () => {
     notepad = spawn('notepad.exe', [], { detached: false });
-    await sleep(2500);
+    const spawnErr = await new Promise(r => { notepad.once('error', r); setTimeout(() => r(null), 2500); });
+    if (spawnErr) throw new Error('could not start Notepad: ' + spawnErr.message);
     await setState(win, { superPaste: { count: 4, separator: 'enter' } });
     await app.evaluate(async ({ clipboard }) => { await clipboard.writeText('hello penguin'); });
     let cw = await tool('clickwin', notepad.pid);
