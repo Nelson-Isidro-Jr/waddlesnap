@@ -14,6 +14,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <io.h>
+#include <fcntl.h>
 
 static void key(WORD vk, int up) {
   INPUT in; ZeroMemory(&in, sizeof in);
@@ -91,6 +93,7 @@ static int open_clip(void) {
 
 int main(int argc, char **argv) {
   SetProcessDPIAware();
+  _setmode(_fileno(stdout), _O_BINARY); /* keep \r\n from the app untouched */
   if (argc < 2) return 1;
   const char *cmd = argv[1];
   if (!strcmp(cmd, "keys")) {

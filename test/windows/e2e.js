@@ -349,7 +349,7 @@ async function freeSnapTest(app, win, tag, saveName) {
     let t = await tool('gettext', notepad.pid);
     if (t.code !== 0) t = await tool('gettext', 0, 'Notepad');
     const want = ['hello penguin', 'hello penguin', 'hello penguin', 'hello penguin'].join('\r\n');
-    check('Notepad receives exactly 4 pastes on separate lines', t.out.replace(/\r?\n/g, '\r\n') === want, JSON.stringify(t.out));
+    check('Notepad receives exactly 4 pastes on separate lines', t.out.replace(/\r*\n/g, '\r\n') === want, JSON.stringify(t.out));
     await gdi('paste-in-notepad');
     // empty clipboard -> warning, nothing pasted
     await app.evaluate(async ({ clipboard }) => { await clipboard.clear(); });
@@ -361,6 +361,46 @@ async function freeSnapTest(app, win, tag, saveName) {
     check('empty clipboard pastes nothing', t2.out === t.out, JSON.stringify(t2.out));
   });
   try { if (notepad) process.kill(notepad.pid); } catch { /* gone */ }
+
+  await step('super paste an image (×3)', async () => {
+    const st = await state(win);
+    const rec = st.recent.find(r => r.w === 640 && r.h === 480 && r.file);
+    if (!rec) throw new Error('no 640x480 snap in recent list');
+    const copied = await win.evaluate((id) => window.waddle.invoke('recent:copy', id), rec.id);
+    check('"Copy again" puts a recent snap on the clipboard', copied);
+    await setState(win, { superPaste: { count: 3, separator: 'none' } });
+    await app.evaluate(async ({ BrowserWindow }) => {
+      const w = new BrowserWindow({ x: 220, y: 160, width: 640, height: 420, title: 'Paste target', alwaysOnTop: true, backgroundColor: '#ffffff' });
+      const html = `<html><body style="margin:0;font:16px sans-serif"><div id=ed contenteditable style="position:fixed;inset:0;padding:12px;outline:none">image paste target</div><script>
+        window.__pastes = [];
+        const ed = document.getElementById('ed');
+        ed.addEventListener('paste', async (e) => {
+          const items = [...e.clipboardData.items];
+          const rec = { types: items.map(i => i.type), w: 0, h: 0 };
+          window.__pastes.push(rec);
+          const img = items.find(i => i.type.startsWith('image/'));
+          e.preventDefault();
+          if (img) { const bm = await createImageBitmap(img.getAsFile()); rec.w = bm.width; rec.h = bm.height; }
+        });
+        ed.focus();</script></body></html>`;
+      await w.loadURL('data:text/html;base64,' + Buffer.from(html).toString('base64'));
+      w.focus();
+      globalThis.__pasteTarget = w;
+    });
+    await sleep(800);
+    const b = await app.evaluate(({ screen }) => { const w = globalThis.__pasteTarget; const r = w.getContentBounds(); return { x: r.x, y: r.y, w: r.width, h: r.height, sf: screen.getDisplayMatching(r).scaleFactor }; });
+    await tool('click', Math.round((b.x + b.w / 2) * b.sf), Math.round((b.y + b.h / 2) * b.sf));
+    await sleep(400);
+    await keys(VK.CTRL, VK.ALT, VK.P);
+    await sleep(3500);
+    const pastes = JSON.parse(await app.evaluate(() => globalThis.__pasteTarget.webContents.executeJavaScript('JSON.stringify(window.__pastes)')));
+    log('image pastes:', pastes);
+    await gdi('image-paste-target');
+    const imgs = pastes.filter(p => p.types.some(t => t.startsWith('image/')));
+    check('Super Paste delivers the image 3 times', pastes.length === 3 && imgs.length === 3, JSON.stringify(pastes));
+    check('each pasted image is 640×480', imgs.length > 0 && imgs.every(p => p.w === 640 && p.h === 480), JSON.stringify(imgs.map(p => `${p.w}x${p.h}`)));
+    await app.evaluate(() => { globalThis.__pasteTarget.destroy(); globalThis.__pasteTarget = null; });
+  });
 
   await step('change hotkey with the recorder', async () => {
     await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows().find(x => x.webContents.getURL().endsWith('index.html')); w.show(); w.focus(); });
@@ -378,9 +418,14 @@ async function freeSnapTest(app, win, tag, saveName) {
     await win.fill('#tryArea', '');
     const c = await elCenterOnScreen(app, win, '#tryArea', 'index.html');
     await tool('click', c.x, c.y); await sleep(300);
+    const focus = await win.evaluate(() => ({ hasFocus: document.hasFocus(), active: document.activeElement && document.activeElement.id }));
+    const st2 = await state(win);
+    log('before Ctrl+Alt+V:', { click: c, focus, hotkeys: st2.hotkeys, failures: st2.hotkeyFailures });
+    await gdi('before-ctrl-alt-v');
     await keys(VK.CTRL, VK.ALT, VK.V);
     await sleep(2500);
-    check('new hotkey works', (await win.inputValue('#tryArea')) === 'yoyo', await win.inputValue('#tryArea'));
+    await gdi('after-ctrl-alt-v');
+    check('new hotkey works', (await win.inputValue('#tryArea')) === 'yoyo', JSON.stringify({ value: await win.inputValue('#tryArea'), focus, failures: st2.hotkeyFailures }));
     const res = await win.evaluate(() => window.waddle.invoke('hotkey:set', 'superPaste', 'Control+Alt+P'));
     check('hotkey restored to Ctrl+Alt+P', res.ok, JSON.stringify(res));
   });
@@ -424,6 +469,7 @@ async function freeSnapTest(app, win, tag, saveName) {
     await app.close().catch(() => {});
   }, 240000);
 
+  try { fs.copyFileSync(path.join(process.env.APPDATA || '', 'WaddleSnap', 'waddlesnap.log'), path.join(OUT, 'waddlesnap-app.log')); } catch (e) { log('no app log:', e.message); }
   const failed = results.filter(r => !r.ok);
   const md = ['# WaddleSnap Windows E2E', '', `${results.length - failed.length}/${results.length} checks passed`, '',
     ...results.map(r => `- ${r.ok ? '✅' : '❌'} ${r.name}${r.ok ? '' : `\n  - ${r.detail.replace(/\n/g, '\n    ')}`}`)].join('\n');

@@ -132,14 +132,17 @@ async function clipboardIsEmpty() {
 // size * scaleFactor can be off by one (2560 px at 150% -> 1707 DIP -> 2561 px),
 // which would make the capture get resampled. On Windows ask the OS directly.
 function physicalSize(display) {
+  const sf = display.scaleFactor || 1;
+  const est = { width: Math.round(display.bounds.width * sf), height: Math.round(display.bounds.height * sf) };
   if (process.platform === 'win32' && typeof screen.dipToScreenRect === 'function') {
     try {
       const r = screen.dipToScreenRect(null, display.bounds);
-      if (r && r.width > 0 && r.height > 0) return { width: r.width, height: r.height };
-    } catch { /* fall back below */ }
+      // Trust the OS value only when it agrees with Electron's scale (it can disagree when
+      // the scale is overridden, e.g. --force-device-scale-factor); then it is the exact one.
+      if (r && Math.abs(r.width - est.width) <= 3 && Math.abs(r.height - est.height) <= 3) return { width: r.width, height: r.height };
+    } catch { /* fall back to the estimate */ }
   }
-  const sf = display.scaleFactor || 1;
-  return { width: Math.round(display.bounds.width * sf), height: Math.round(display.bounds.height * sf) };
+  return est;
 }
 
 async function captureDisplay(display) {
@@ -304,10 +307,8 @@ async function deliver(img, meta) {
   store.set({ recent: [entry, ...st.recent].slice(0, 12) });
   onStateChanged();
   if (mainWin) mainWin.webContents.send('snapped', entry);
-  const text = st.capture.copy && file ? 'Copied & saved · click to open'
-    : st.capture.copy ? 'Copied! Ready to paste anywhere'
-    : file ? 'Saved · click to open the folder' : 'Snapped!';
-  toast({ kind: 'snap', title: `Snapped ${meta.w} × ${meta.h}!`, text, thumb: entry.thumb, file });
+  const what = st.capture.copy && file ? 'copied & saved' : st.capture.copy ? 'copied' : file ? 'saved' : '';
+  toast({ kind: 'snap', title: 'Snapped!', text: `${meta.w} × ${meta.h}${what ? ' · ' + what : ''}`, thumb: entry.thumb, file });
 }
 
 /* ───────────────────────── super paste ───────────────────────── */
