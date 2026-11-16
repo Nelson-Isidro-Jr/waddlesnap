@@ -234,16 +234,17 @@ async function startSnap(mode, opts = {}) {
     Object.assign(snap, { display, image, scale });
 
     const st = store.get();
-    const ls = st.lastSnap;
-    const anchor = mode === 'preset' && st.capture.rememberPosition !== false && ls && ls.displayId === String(display.id)
-      ? { x: ls.xPx / scale, y: ls.yPx / scale } : null;
+    // Remembered spots are stored in screen pixels per display; convert to this overlay's DIP.
+    const remember = st.capture.rememberPosition !== false;
+    const toDip = (pos) => (remember && pos && pos.displayId === String(display.id)
+      ? { x: pos.xPx / scale, y: pos.yPx / scale } : null);
     ow.webContents.send('overlay:init', {
       mode,
-      anchor,
+      anchor: mode === 'preset' ? toDip(st.lastSnap) : null, // fallback: where the last snap was taken
       image: 'data:image/jpeg;base64,' + image.toJPEG(92).toString('base64'),
       scale,
       imgW: size.width, imgH: size.height,
-      presets: st.presets,
+      presets: st.presets.map(p => ({ ...p, anchor: toDip(p.pos) })), // each size's own spot
       activeId: opts.presetId || st.activePresetId,
       cursor: { x: cursor.x - display.bounds.x, y: cursor.y - display.bounds.y },
       sounds: st.ui.sounds,
@@ -272,7 +273,11 @@ ipcMain.on('overlay:done', async (_e, res) => {
   try {
     if (!res || res.action === 'cancel') return;
     if (res.action === 'define') {
-      const size = { w: Math.round(res.rect.w * s.scale), h: Math.round(res.rect.h * s.scale) };
+      const size = {
+        w: Math.round(res.rect.w * s.scale), h: Math.round(res.rect.h * s.scale),
+        // the new size remembers exactly where it was drawn
+        pos: { displayId: String(s.display.id), xPx: Math.round(res.rect.x * s.scale), yPx: Math.round(res.rect.y * s.scale) },
+      };
       s.returnToMain = false;
       showMain('sizes');
       mainWin.webContents.send('size-defined', size);
@@ -288,17 +293,16 @@ ipcMain.on('overlay:done', async (_e, res) => {
     h = Math.max(1, Math.min(h, imgH));
     const x = Math.max(0, Math.min(Math.round(res.rect.x * s.scale), imgW - w));
     const y = Math.max(0, Math.min(Math.round(res.rect.y * s.scale), imgH - h));
-    store.set({ lastSnap: { displayId: String(s.display.id), xPx: x, yPx: y } }); // next snap opens here
+    // Remember where this snap was taken: globally, on the size that was used,
+    // and on a size created from it ("Save size"), so those sizes open right here next time.
+    const pos = { displayId: String(s.display.id), xPx: x, yPx: y };
+    let presets = st.presets.map(p => (preset && p.id === preset.id ? { ...p, pos } : p));
+    if (res.savePresetName) presets = [...presets, { id: uid(), name: res.savePresetName.slice(0, 32), w, h, pos }];
+    store.set({ lastSnap: pos, presets, activePresetId: preset ? preset.id : st.activePresetId });
+    onStateChanged();
     let out = s.image.crop({ x, y, width: w, height: h });
     const got = out.getSize();
     if (got.width !== w || got.height !== h) out = out.resize({ width: w, height: h, quality: 'best' });
-
-    if (res.savePresetName) {
-      const p = { id: uid(), name: res.savePresetName.slice(0, 32), w, h };
-      store.set({ presets: [...st.presets, p] });
-      onStateChanged();
-    }
-    if (preset && st.activePresetId !== preset.id) { store.set({ activePresetId: preset.id }); onStateChanged(); }
     await deliver(out, { w, h, name: preset ? preset.name : (res.savePresetName || 'Free snap') });
   } catch (e) {
     console.error(e);

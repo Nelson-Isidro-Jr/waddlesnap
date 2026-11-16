@@ -90,6 +90,7 @@ body.in #toolbar { animation: tbIn .45s var(--spring) .05s both; }
 .tb-chip.on small { color: rgba(255,255,255,.85); }
 .tb-chip.on .n { color: var(--pink); }
 .tb-chip.big small::after { content: ' · trimmed'; }
+.tb-chip.has-spot .n { box-shadow: 0 0 0 2px #FF8DBB; }
 .tb-chips { display: flex; gap: 6px; min-width: 0; flex: 0 1 auto; overflow-x: auto; scrollbar-width: none; scroll-behavior: smooth; }
 .tb-chips::-webkit-scrollbar { display: none; }
 .tb-chips.overflow { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%); padding: 0 10px; }

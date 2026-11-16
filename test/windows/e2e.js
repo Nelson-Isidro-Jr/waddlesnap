@@ -291,6 +291,21 @@ async function freeSnapTest(app, win, tag, saveName) {
   await sleep(800);
   const st2 = await state(win);
   check(`${tag}: "Save size" added a custom size`, st2.presets.some(p => p.name === saveName && p.w === ew && p.h === eh), st2.presets.map(p => `${p.name}:${p.w}x${p.h}`).join(', '));
+  // Snap with the active size (Classic) opens at Classic's own spot, then the new size jumps to where it was drawn
+  const idx = st2.presets.findIndex(p => p.name === saveName);
+  const classicPos = st2.presets.find(p => p.w === 640 && p.h === 480).pos;
+  const ov2 = await waitOverlay(app, () => keys(VK.CTRL, VK.ALT, VK.S));
+  const a = await selRect(ov2);
+  check(`${tag}: each size opens at its own spot (Classic)`, classicPos && Math.abs(a.x - classicPos.xPx / s) <= 1 && Math.abs(a.y - classicPos.yPx / s) <= 1, JSON.stringify({ a, classicPos }));
+  if (idx >= 0 && idx < 9) {
+    await keys(0x31 + idx);
+    await sleep(500);
+    const b = await selRect(ov2);
+    check(`${tag}: size made from a free snap jumps to where it was drawn`, Math.abs(b.x - r.x) <= 1 && Math.abs(b.y - r.y) <= 1 && Math.abs(b.w - r.w) <= 1, JSON.stringify({ drawn: { x: r.x, y: r.y, w: r.w }, now: b }));
+    await gdi(`${tag}-created-size-at-its-spot`);
+  }
+  await keys(VK.ESC);
+  await sleep(700);
 }
 
 (async () => {
@@ -369,8 +384,20 @@ async function freeSnapTest(app, win, tag, saveName) {
     const w = await win.inputValue('#fW'), h = await win.inputValue('#fH');
     check('drawn size pre-fills the form', w === '412' && h === '309', `${w}x${h}`);
     await gdi('drawn-size-form');
-    await win.click('[data-close]');
-    await sleep(400);
+    await win.fill('#fName', 'CI Drawn');
+    await win.click('#saveSize');
+    await sleep(700);
+    const st = await state(win);
+    const p = st.presets.find(x => x.name === 'CI Drawn');
+    check('drawn size is saved with its spot', p && p.pos && p.pos.xPx === 200 && p.pos.yPx === 200, JSON.stringify(p));
+    if (p) {
+      const ov2 = await waitOverlay(app, () => win.evaluate((id) => window.waddle.invoke('snap:start', 'preset', id), p.id));
+      const r = await selRect(ov2);
+      check('drawn size opens exactly where it was drawn', Math.abs(r.x - 200) <= 1 && Math.abs(r.y - 200) <= 1 && r.label.replace(/\s/g, '') === '412×309', JSON.stringify(r));
+      await gdi('drawn-size-at-its-spot');
+      await keys(VK.ESC);
+      await sleep(900);
+    }
   });
 
   await step('super paste into the app (real hotkey)', async () => {

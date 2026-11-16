@@ -193,7 +193,7 @@
         <div class="pv">${i < 9 ? `<span class="key" title="Press ${i + 1} while snapping">${i + 1}</span>` : ''}
           ${on ? `<span class="badge">${icon('star')} Hotkey size</span>` : ''}
           <i style="width:${Math.max(10, Math.round(p.w * k))}px;height:${Math.max(10, Math.round(p.h * k))}px"></i></div>
-        <div class="meta"><div style="min-width:0"><h3>${esc(p.name)}</h3><span class="ar">${ratio(p.w, p.h)}${big ? ' · too big here' : ''}</span></div><span class="dim">${p.w}×${p.h}</span></div>
+        <div class="meta"><div style="min-width:0"><h3>${esc(p.name)}</h3><span class="ar">${ratio(p.w, p.h)}${big ? ' · too big here' : ''}${p.pos ? ' · 📍 saved spot' : ''}</span></div><span class="dim">${p.w}×${p.h}</span></div>
         <div class="row">
           <button class="btn primary sm" data-act="snap">${icon('camera')}<span>Snap</span></button>
           <button class="icon-btn ${on ? 'starred' : ''}" data-act="star" title="Use for the Snap hotkey">${icon('star')}</button>
@@ -233,8 +233,10 @@
   /* size modal */
   const QUICK = [[1920, 1080], [1280, 720], [1080, 1080], [1080, 1350], [1080, 1920], [800, 600], [512, 512], [400, 300]];
   let editing = null;
+  let pendingPos = null; // spot of a size drawn on screen, saved with it
   function openSizeModal(preset = null, prefill = null) {
     editing = preset;
+    pendingPos = (!preset && prefill && prefill.pos) || null;
     const m = $('#sizeModal');
     $('#sizeModalTitle').textContent = preset ? 'Edit size' : 'New size';
     $('#fName').value = preset ? preset.name : (prefill ? 'My size' : '');
@@ -282,7 +284,7 @@
     const name = ($('#fName').value.trim() || `${w}×${h}`).slice(0, 32);
     let presets;
     if (editing) presets = state.presets.map(p => (p.id === editing.id ? { ...p, name, w, h } : p));
-    else presets = [...state.presets, { id: Math.random().toString(36).slice(2, 10), name, w, h }];
+    else presets = [...state.presets, { id: Math.random().toString(36).slice(2, 10), name, w, h, ...(pendingPos ? { pos: pendingPos } : {}) }];
     closeSizeModal();
     await save({ presets });
     sfx('pop');
