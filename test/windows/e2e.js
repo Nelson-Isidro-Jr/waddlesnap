@@ -216,6 +216,11 @@ async function presetSnapTest(app, win, tag) {
   const dbg2 = await ov.evaluate(() => ({ ...window.__dbg, focus: document.hasFocus() }));
   check(`${tag}: real mouse drag moves the frame`, Math.abs(r2.x - 150) < 3 && Math.abs(r2.y - 120) < 3, JSON.stringify({ r2, from, to, overlay: dbg2 }));
   await gdi(`${tag}-overlay-moved`);
+  const tb = await ov.evaluate(() => {
+    const vis = (sel) => { const b = document.querySelector(sel).getBoundingClientRect(); return b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight; };
+    return { snap: vis('[data-act="snap"]'), cancel: vis('[data-act="cancel"]'), chips: document.querySelectorAll('.tb-chip').length };
+  });
+  check(`${tag}: Snap and ✕ buttons fully on screen (${tb.chips} sizes)`, tb.snap && tb.cancel, JSON.stringify(tb));
   await keys(VK.ENTER);
   const f = await newFile(dir, before);
   if (!f) {
@@ -515,6 +520,12 @@ async function freeSnapTest(app, win, tag, saveName) {
       const sf = await app.evaluate(({ screen }) => screen.getPrimaryDisplay().scaleFactor);
       check(`${pct}%: app sees ${pct}% scaling`, Math.abs(sf - pct / 100) < 0.01, `scaleFactor=${sf}`);
       await sleep(800);
+      const fit = await app.evaluate(({ BrowserWindow, screen }) => {
+        const w = BrowserWindow.getAllWindows().find(x => x.webContents.getURL().endsWith('index.html'));
+        const b = w.getBounds(), wa = screen.getDisplayMatching(b).workArea;
+        return { b, wa, ok: b.x >= wa.x && b.y >= wa.y && b.x + b.width <= wa.x + wa.width && b.y + b.height <= wa.y + wa.height };
+      });
+      check(`${pct}%: main window fits on screen`, fit.ok, JSON.stringify(fit));
       await gdi(`dpi${pct}-main`);
       await presetSnapTest(app, win, `dpi${pct}`);
       if (pct === 150) await freeSnapTest(app, win, `dpi${pct}`, 'CI Free 150');

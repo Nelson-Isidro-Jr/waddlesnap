@@ -60,7 +60,9 @@
     // keep the hint out of the way
     const hr = { top: 14, bottom: 70, left: VW() / 2 - 330, right: VW() / 2 + 330 };
     const overlapTop = rect.y < hr.bottom && rect.y + rect.h > hr.top && rect.x < hr.right && rect.x + rect.w > hr.left;
-    hint.classList.toggle('low', overlapTop && rect.y + rect.h < VH() - 90);
+    const canGoLow = rect.y + rect.h < VH() - 90;
+    hint.classList.toggle('low', overlapTop && canGoLow);
+    if (overlapTop && !canGoLow) hint.classList.add('faint'); // frame needs the whole height: get out of the way
   }
 
   function placeFloaters() {
@@ -87,7 +89,7 @@
         const big = p.w > cfg.imgW || p.h > cfg.imgH;
         return `<button class="tb-chip ${preset && p.id === preset.id ? 'on' : ''} ${big ? 'big' : ''}" data-i="${i}" title="${esc(p.name)}"><span class="n">${i + 1}</span>${esc(p.name)} <small>${p.w}×${p.h}</small></button>`;
       }).join('');
-      toolbar.innerHTML = `${chips}<span class="tb-sep"></span>
+      toolbar.innerHTML = `<div class="tb-chips">${chips}</div><span class="tb-sep"></span>
         <button class="tb-btn go" data-act="snap">${ICON.snap} Snap <kbd>Enter</kbd></button>
         <button class="tb-btn x" data-act="cancel" title="Cancel (Esc)">${ICON.x}</button>`;
     } else if (mode === 'free') {
@@ -103,6 +105,16 @@
         <button class="tb-btn x" data-act="cancel" title="Cancel (Esc)">${ICON.x}</button>`;
     }
     if (naming) setTimeout(() => { const n = $('#tbName'); if (n) { n.focus(); n.addEventListener('keydown', nameKeys); } }, 30);
+    const strip = toolbar.querySelector('.tb-chips');
+    if (strip) {
+      strip.classList.toggle('overflow', strip.scrollWidth > strip.clientWidth + 1);
+      const on = strip.querySelector('.tb-chip.on');
+      if (on) {
+        const l = on.offsetLeft - strip.offsetLeft, r = l + on.offsetWidth;
+        if (l < strip.scrollLeft + 16) strip.scrollLeft = Math.max(0, l - 24);
+        else if (r > strip.scrollLeft + strip.clientWidth - 16) strip.scrollLeft = r - strip.clientWidth + 24;
+      }
+    }
     if (rect) placeFloaters();
   }
 

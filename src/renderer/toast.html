@@ -28,7 +28,7 @@
     @keyframes thumbIn { from { transform: rotate(-20deg) scale(.4); opacity: 0; } to { transform: rotate(-4deg); opacity: 1; } }
     .txt { min-width: 0; flex: 1; }
     .title { font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 17px; color: var(--head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .text { font-size: 12.5px; color: var(--muted); font-weight: 700; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .text { font-size: 12.5px; line-height: 1.35; color: var(--muted); font-weight: 700; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .count { font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 40px; color: var(--pink); line-height: 1; flex: none; }
     .toast.show .count { animation: cnt .6s var(--spring) .1s both; }
     @keyframes cnt { from { transform: scale(.3) rotate(-20deg); opacity: 0; } }

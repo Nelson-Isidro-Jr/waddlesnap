@@ -49,8 +49,12 @@ const webPrefs = (extra = {}) => ({
 /* ───────────────────────── windows ───────────────────────── */
 
 function createMain() {
+  // Fit the window to the screen it opens on (e.g. a 1080p laptop at 150 % only has ~670 DIP of height).
+  const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const width = Math.min(1000, wa.width - 24), height = Math.min(720, wa.height - 24);
   mainWin = new BrowserWindow({
-    width: 1000, height: 720, minWidth: 880, minHeight: 600,
+    width, height, minWidth: Math.min(860, width), minHeight: Math.min(540, height),
+    x: Math.round(wa.x + (wa.width - width) / 2), y: Math.round(wa.y + (wa.height - height) / 2),
     frame: false, show: false, backgroundColor: '#FFF4F8',
     icon: R('assets', 'icon-256.png'),
     title: 'WaddleSnap',

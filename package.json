@@ -1,6 +1,6 @@
 {
   "name": "waddlesnap",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Cute pink penguin screenshot & super paste tool",
   "main": "src/main.js",
   "scripts": {
