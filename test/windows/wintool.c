@@ -8,6 +8,7 @@
  *   wintool shot <out.bmp>          capture the whole virtual screen with GDI (independent of the app)
  *   wintool clipinfo                list clipboard formats and the CF_DIB size
  *   wintool clipdump <out.bmp>      save the clipboard CF_DIB as a .bmp
+ *   wintool setdpi <percent>        change Windows display scaling live (e.g. 150)
  * Build: x86_64-w64-mingw32-gcc -O2 -s -static -o wintool.exe wintool.c -lgdi32
  */
 #include <windows.h>
@@ -86,6 +87,41 @@ static int shot(const char *path) {
   return r;
 }
 
+
+/* ---- live display scaling change (same undocumented DisplayConfig calls Windows Settings uses;
+   method from github.com/imniko/SetDPI) ---- */
+typedef struct { DISPLAYCONFIG_DEVICE_INFO_HEADER header; INT32 minRel, curRel, maxRel; } DPI_GET;
+typedef struct { DISPLAYCONFIG_DEVICE_INFO_HEADER header; INT32 rel; } DPI_SET;
+static const int DPIVALS[] = { 100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500 };
+static int setdpi(int want) {
+  UINT32 np = 0, nm = 0;
+  if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &np, &nm) != ERROR_SUCCESS) { printf("sizes failed\n"); return 2; }
+  DISPLAYCONFIG_PATH_INFO *paths = calloc(np, sizeof *paths);
+  DISPLAYCONFIG_MODE_INFO *modes = calloc(nm, sizeof *modes);
+  if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &np, paths, &nm, modes, NULL) != ERROR_SUCCESS) { printf("query failed\n"); return 2; }
+  int rc = 0;
+  for (UINT32 i = 0; i < np; i++) {
+    DPI_GET g; ZeroMemory(&g, sizeof g);
+    g.header.type = (DISPLAYCONFIG_DEVICE_INFO_TYPE)-3; g.header.size = sizeof g;
+    g.header.adapterId = paths[i].sourceInfo.adapterId; g.header.id = paths[i].sourceInfo.id;
+    if (DisplayConfigGetDeviceInfo(&g.header) != ERROR_SUCCESS) { printf("get failed\n"); rc = 3; continue; }
+    int rec = abs(g.minRel);
+    int cur = DPIVALS[rec + g.curRel], max = DPIVALS[rec + g.maxRel];
+    int idx = -1;
+    for (int k = 0; k < (int)(sizeof DPIVALS / sizeof *DPIVALS); k++) if (DPIVALS[k] == want) idx = k;
+    printf("source %u: current=%d%% recommended=%d%% max=%d%%\n", paths[i].sourceInfo.id, cur, DPIVALS[rec], max);
+    if (idx < 0 || want > max) { printf("  %d%% not allowed here\n", want); rc = 4; continue; }
+    DPI_SET st; ZeroMemory(&st, sizeof st);
+    st.header.type = (DISPLAYCONFIG_DEVICE_INFO_TYPE)-4; st.header.size = sizeof st;
+    st.header.adapterId = g.header.adapterId; st.header.id = g.header.id; st.rel = idx - rec;
+    LONG r = DisplayConfigSetDeviceInfo(&st.header);
+    printf("  set %d%% -> %s\n", want, r == ERROR_SUCCESS ? "ok" : "FAILED");
+    if (r != ERROR_SUCCESS) rc = 5;
+  }
+  free(paths); free(modes);
+  return rc;
+}
+
 static int open_clip(void) {
   for (int i = 0; i < 20; i++) { if (OpenClipboard(NULL)) return 1; Sleep(50); }
   return 0;
@@ -133,6 +169,7 @@ int main(int argc, char **argv) {
     return 0;
   }
   if (!strcmp(cmd, "shot") && argc >= 3) return shot(argv[2]);
+  if (!strcmp(cmd, "setdpi") && argc >= 3) return setdpi(atoi(argv[2]));
   if (!strcmp(cmd, "clipinfo")) {
     if (!open_clip()) { printf("CANTOPEN\n"); return 5; }
     UINT f = 0; printf("formats:");

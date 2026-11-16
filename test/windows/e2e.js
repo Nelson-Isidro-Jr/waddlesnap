@@ -110,6 +110,17 @@ async function launch(extraArgs = []) {
 }
 
 const state = (win) => win.evaluate(() => window.waddle.invoke('state:get'));
+// Record what the page actually receives (keys, paste, focus) to diagnose paste problems.
+const armEvents = (win) => win.evaluate(() => {
+  window.__ev = [];
+  const push = (x) => window.__ev.push(x);
+  for (const t of ['keydown', 'keyup']) document.addEventListener(t, e => push(`${t}:${e.key}${e.ctrlKey ? '+C' : ''}${e.altKey ? '+A' : ''}`), true);
+  document.addEventListener('paste', e => push('paste:' + [...e.clipboardData.types].join('|')), true);
+  document.addEventListener('input', () => push('input'), true);
+  window.addEventListener('blur', () => push('blur'));
+  window.addEventListener('focus', () => push('focus'));
+});
+const readEvents = (win) => win.evaluate(() => window.__ev || []);
 const setState = (win, patch) => win.evaluate((p) => window.waddle.invoke('state:set', p), patch);
 
 async function waitOverlay(app, trigger) {
@@ -326,8 +337,10 @@ async function freeSnapTest(app, win, tag, saveName) {
     const c = await elCenterOnScreen(app, win, '#tryArea', 'index.html');
     await tool('click', c.x, c.y); // real click so the window is really in the foreground
     await sleep(400);
+    await armEvents(win);
     await keys(VK.CTRL, VK.ALT, VK.P);
     await sleep(3000);
+    log('events (Ctrl+Alt+P):', await readEvents(win));
     const v = await win.inputValue('#tryArea');
     check('Ctrl+Alt+P pastes 3 times', v === 'hi hi hi ', JSON.stringify(v));
     await gdi('paste-in-app');
@@ -422,10 +435,23 @@ async function freeSnapTest(app, win, tag, saveName) {
     const st2 = await state(win);
     log('before Ctrl+Alt+V:', { click: c, focus, hotkeys: st2.hotkeys, failures: st2.hotkeyFailures });
     await gdi('before-ctrl-alt-v');
+    await armEvents(win);
     await keys(VK.CTRL, VK.ALT, VK.V);
     await sleep(2500);
+    const evV = await readEvents(win);
+    log('events (Ctrl+Alt+V):', evV);
     await gdi('after-ctrl-alt-v');
-    check('new hotkey works', (await win.inputValue('#tryArea')) === 'yoyo', JSON.stringify({ value: await win.inputValue('#tryArea'), focus, failures: st2.hotkeyFailures }));
+    check('new hotkey works', (await win.inputValue('#tryArea')) === 'yoyo', JSON.stringify({ value: await win.inputValue('#tryArea'), focus, events: evV }));
+    // control: a hotkey whose letter is not V
+    const rb = await win.evaluate(() => window.waddle.invoke('hotkey:set', 'superPaste', 'Control+Alt+B'));
+    await win.fill('#tryArea', '');
+    await tool('click', c.x, c.y); await sleep(300);
+    await armEvents(win);
+    await keys(VK.CTRL, VK.ALT, 0x42);
+    await sleep(2500);
+    const evB = await readEvents(win);
+    log('events (Ctrl+Alt+B):', evB);
+    check('another letter hotkey (Ctrl+Alt+B) works', rb.ok && (await win.inputValue('#tryArea')) === 'yoyo', JSON.stringify({ value: await win.inputValue('#tryArea'), events: evB }));
     const res = await win.evaluate(() => window.waddle.invoke('hotkey:set', 'superPaste', 'Control+Alt+P'));
     check('hotkey restored to Ctrl+Alt+P', res.ok, JSON.stringify(res));
   });
@@ -459,15 +485,25 @@ async function freeSnapTest(app, win, tag, saveName) {
   await app.close().catch(() => {});
   await sleep(2000);
 
-  // ── second pass: emulate 150 % display scaling
-  await step('150% scaling pass', async () => {
-    ({ app, win } = await launch(['--force-device-scale-factor=1.5']));
-    await sleep(1200);
-    await gdi('dpi150-main');
-    await presetSnapTest(app, win, 'dpi150');
-    await freeSnapTest(app, win, 'dpi150', 'CI Free 150');
-    await app.close().catch(() => {});
-  }, 240000);
+  // ── real Windows display scaling passes (changes the machine's actual scaling live)
+  for (const pct of [150, 125, 175]) {
+    await step(`${pct}% Windows scaling pass`, async () => {
+      const r = await tool('setdpi', pct);
+      log(`setdpi ${pct}:`, r.out);
+      if (r.code !== 0) { check(`${pct}%: Windows scaling can be set on this machine`, false, r.out); return; }
+      await sleep(3000);
+      ({ app, win } = await launch());
+      const sf = await app.evaluate(({ screen }) => screen.getPrimaryDisplay().scaleFactor);
+      check(`${pct}%: app sees ${pct}% scaling`, Math.abs(sf - pct / 100) < 0.01, `scaleFactor=${sf}`);
+      await sleep(800);
+      await gdi(`dpi${pct}-main`);
+      await presetSnapTest(app, win, `dpi${pct}`);
+      if (pct === 150) await freeSnapTest(app, win, `dpi${pct}`, 'CI Free 150');
+      await app.close().catch(() => {});
+      await sleep(1500);
+    }, 240000);
+  }
+  log('restore 100%:', (await tool('setdpi', 100)).out);
 
   try { fs.copyFileSync(path.join(process.env.APPDATA || '', 'WaddleSnap', 'waddlesnap.log'), path.join(OUT, 'waddlesnap-app.log')); } catch (e) { log('no app log:', e.message); }
   const failed = results.filter(r => !r.ok);
