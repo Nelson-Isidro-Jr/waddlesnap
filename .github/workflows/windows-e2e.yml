@@ -1,0 +1,57 @@
+name: windows-e2e
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  e2e:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Screen setup
+        shell: pwsh
+        run: |
+          try { Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction Stop; "resolution set" } catch { "Set-DisplayResolution failed: $_" }
+          Add-Type -AssemblyName System.Windows.Forms
+          [System.Windows.Forms.Screen]::AllScreens | ForEach-Object { "$($_.DeviceName) $($_.Bounds) primary=$($_.Primary)" }
+      - name: Install dependencies
+        run: npm ci
+      - name: Build installer (native Windows build)
+        run: npx electron-builder --win nsis --x64 --publish never
+      - name: Install silently
+        shell: pwsh
+        run: |
+          $setup = (Resolve-Path 'dist\WaddleSnap-Setup-*.exe' | Select-Object -First 1).Path
+          $p = Start-Process $setup -ArgumentList '/S' -Wait -PassThru
+          "installer exit code: $($p.ExitCode)"
+          Get-ChildItem "$env:LOCALAPPDATA\Programs\WaddleSnap" | Select-Object Name
+          if ($p.ExitCode -ne 0) { exit 1 }
+      - name: End-to-end tests
+        id: e2e
+        continue-on-error: true
+        run: |
+          npm i --no-save playwright-core@1.63.0 pngjs@7.0.0
+          node test/windows/e2e.js
+      - name: Installer tests
+        id: inst
+        continue-on-error: true
+        shell: pwsh
+        run: ./test/windows/installer-tests.ps1
+      - name: Publish results
+        if: always()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force test/out | Out-Null
+          Compress-Archive -Path test/out/* -DestinationPath results.zip -Force
+          $setup = (Resolve-Path 'dist\WaddleSnap-Setup-*.exe' | Select-Object -First 1).Path
+          gh release create "ci-${{ github.run_number }}" results.zip "$setup" --prerelease --title "CI run ${{ github.run_number }}" --notes "Windows E2E results for ${{ github.sha }}"
+      - name: Fail if any test failed
+        if: steps.e2e.outcome != 'success' || steps.inst.outcome != 'success'
+        run: exit 1

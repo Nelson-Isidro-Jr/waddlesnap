@@ -1,0 +1,63 @@
+{
+  "name": "waddlesnap",
+  "version": "1.0.0",
+  "description": "Cute pink penguin screenshot & super paste tool",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron . --no-sandbox",
+    "dist": "electron-builder --win nsis --x64"
+  },
+  "keywords": [],
+  "author": "WaddleSnap",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
+  },
+  "productName": "WaddleSnap",
+  "build": {
+    "appId": "com.waddlesnap.app",
+    "productName": "WaddleSnap",
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "src/bin/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "WaddleSnap",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "runAfterFinish": true,
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "artifactName": "WaddleSnap-Setup-${version}.${ext}"
+    },
+    "electronLanguages": [
+      "en-US"
+    ],
+    "publish": null
+  }
+}

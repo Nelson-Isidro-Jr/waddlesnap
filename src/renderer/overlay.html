@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'">
+  <title>WaddleSnap capture</title>
+  <link rel="stylesheet" href="fonts.css">
+  <link rel="stylesheet" href="penguin.css">
+  <link rel="stylesheet" href="overlay.css">
+</head>
+<body>
+  <img id="bg" alt="">
+  <div id="stage">
+    <div id="guideX" class="guide x"></div>
+    <div id="guideY" class="guide y"></div>
+    <div id="sel">
+      <span class="ants"></span>
+      <span class="h" data-h="nw"></span><span class="h" data-h="n"></span><span class="h" data-h="ne"></span>
+      <span class="h" data-h="w"></span><span class="h" data-h="e"></span>
+      <span class="h" data-h="sw"></span><span class="h" data-h="s"></span><span class="h" data-h="se"></span>
+    </div>
+    <div id="label"><span class="lp" id="labelPeng"></span><b id="labelDims">1280 × 720</b><span id="labelName"></span></div>
+    <div id="toolbar"></div>
+    <div id="hint"><span class="hp" id="hintPeng"></span><span id="hintText"></span></div>
+    <div id="flash"></div>
+  </div>
+  <script src="penguin.js"></script>
+  <script src="sounds.js"></script>
+  <script src="overlay.js"></script>
+</body>
+</html>

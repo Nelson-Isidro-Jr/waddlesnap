@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'">
+  <title>WaddleSnap</title>
+  <link rel="stylesheet" href="fonts.css">
+  <link rel="stylesheet" href="penguin.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body class="booting">
+  <div class="sky" aria-hidden="true"></div>
+
+  <header class="titlebar">
+    <div class="brand">
+      <span class="brand-peng" id="brandPeng"></span>
+      <span class="brand-name">Waddle<b>Snap</b></span>
+    </div>
+    <div class="win-btns">
+      <button class="win-btn" data-win="minimize" title="Minimize" aria-label="Minimize"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
+      <button class="win-btn close" data-win="close" title="Close" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+    </div>
+  </header>
+
+  <div class="shell">
+    <nav class="side">
+      <div class="nav" id="nav">
+        <span class="nav-pill" id="navPill"></span>
+        <button class="nav-item active" data-page="snap"><i data-icon="camera"></i><span>Snap</span></button>
+        <button class="nav-item" data-page="sizes"><i data-icon="frame"></i><span>Sizes</span></button>
+        <button class="nav-item" data-page="paste"><i data-icon="clipboard"></i><span>Super Paste</span></button>
+        <button class="nav-item" data-page="settings"><i data-icon="gear"></i><span>Settings</span></button>
+      </div>
+
+      <div class="side-card">
+        <div class="side-card-head"><span class="live-dot"></span><span id="liveText">Hotkeys are on</span></div>
+        <div class="side-row"><span>Snap</span><span class="kbd-mini" id="sideSnapKey"></span></div>
+        <div class="side-row"><span>Free snap</span><span class="kbd-mini" id="sideFreeKey"></span></div>
+        <div class="side-row"><span>Paste ×<b id="sideCount">3</b></span><span class="kbd-mini" id="sidePasteKey"></span></div>
+      </div>
+    </nav>
+
+    <main class="pages" id="pages">
+      <!-- ───────────── SNAP ───────────── -->
+      <section class="page active" data-page="snap">
+        <div class="hero card stagger" style="--i:0">
+          <div class="hero-text">
+            <span class="pill-label"><i data-icon="sparkle"></i> Ready to snap</span>
+            <h1>Same size.<br><span class="grad">Every single snap.</span></h1>
+            <p>Pick a saved size, slide the frame wherever you like, and snap. Waddles makes sure it's pixel-perfect every time.</p>
+            <div class="hero-actions">
+              <button class="btn primary big" id="snapNow">
+                <i data-icon="camera"></i>
+                <span><span class="btn-title">Snap <span id="snapNowName">HD Wide</span></span><span class="btn-sub" id="snapNowDims">1280 × 720</span></span>
+              </button>
+              <button class="btn soft big" id="freeNow">
+                <i data-icon="crop"></i>
+                <span><span class="btn-title">Free snap</span><span class="btn-sub">draw any size</span></span>
+              </button>
+            </div>
+            <div class="hero-keys">or press <span class="kbd" id="heroSnapKey"></span> anywhere</div>
+          </div>
+          <div class="hero-art wave-on-hover" id="heroArt">
+            <span class="sparkle s1"></span><span class="sparkle s2"></span><span class="sparkle s3"></span>
+            <div class="hero-peng" id="heroPeng"></div>
+          </div>
+        </div>
+
+        <div class="section-head stagger" style="--i:1">
+          <h2>Your sizes</h2>
+          <button class="link" data-goto="sizes">Manage sizes <i data-icon="arrow"></i></button>
+        </div>
+        <div class="chips stagger" style="--i:2" id="presetChips"></div>
+
+        <div class="duo">
+          <div class="card mini-paste stagger" style="--i:3">
+            <div class="mini-paste-top">
+              <div>
+                <h3>Super Paste</h3>
+                <p class="muted">One press, <b id="miniCountText">3</b> pastes</p>
+              </div>
+              <label class="switch" title="Super Paste on/off"><input type="checkbox" id="miniPasteToggle"><span class="knob"><i></i></span></label>
+            </div>
+            <div class="mini-paste-row">
+              <button class="round-btn" id="miniMinus" aria-label="Fewer"><i data-icon="minus"></i></button>
+              <div class="mini-count"><span class="times">×</span><span id="miniCount" class="count-num">3</span></div>
+              <button class="round-btn" id="miniPlus" aria-label="More"><i data-icon="plus"></i></button>
+            </div>
+            <div class="hero-keys center">press <span class="kbd" id="miniPasteKey"></span></div>
+          </div>
+
+          <div class="card recent stagger" style="--i:4">
+            <div class="section-head tight">
+              <h3>Recent snaps</h3>
+              <div class="head-actions">
+                <button class="icon-btn" id="openFolder" title="Open screenshots folder"><i data-icon="folder"></i></button>
+                <button class="icon-btn" id="clearRecent" title="Clear list"><i data-icon="trash"></i></button>
+              </div>
+            </div>
+            <div class="recent-grid" id="recentGrid"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────────── SIZES ───────────── -->
+      <section class="page" data-page="sizes">
+        <div class="page-head stagger" style="--i:0">
+          <div>
+            <h1>Saved sizes</h1>
+            <p class="muted">The size never changes, only where you put it. Press <span class="kbd sm">1</span>–<span class="kbd sm">9</span> while snapping to switch.</p>
+          </div>
+          <button class="btn primary" id="addSize"><i data-icon="plus"></i><span>New size</span></button>
+        </div>
+        <div class="size-grid" id="sizeGrid"></div>
+      </section>
+
+      <!-- ───────────── SUPER PASTE ───────────── -->
+      <section class="page" data-page="paste">
+        <div class="paste-hero card stagger" style="--i:0">
+          <div class="paste-peng" id="pastePeng"></div>
+          <div class="paste-hero-text">
+            <h1>Super <span class="grad">Paste</span></h1>
+            <p>Copy something once, press <span class="kbd" id="pasteHeroKey"></span>, and Waddles pastes it <b id="pasteHeroCount">3</b> times in a row. No more spamming <span class="kbd sm">Ctrl</span> + <span class="kbd sm">V</span>!</p>
+          </div>
+          <label class="switch big" title="Super Paste on/off"><input type="checkbox" id="pasteToggle"><span class="knob"><i></i></span></label>
+        </div>
+
+        <div class="card counter-card stagger" style="--i:1">
+          <div class="counter-side">
+            <span class="eyebrow">Pastes per press</span>
+            <div class="counter">
+              <button class="round-btn lg" id="cntMinus" aria-label="Fewer"><i data-icon="minus"></i></button>
+              <div class="big-count"><span class="times">×</span><span class="count-num" id="bigCount">3</span></div>
+              <button class="round-btn lg" id="cntPlus" aria-label="More"><i data-icon="plus"></i></button>
+            </div>
+            <div class="quick" id="quickCounts"></div>
+          </div>
+          <div class="paper-stack" id="paperStack" aria-hidden="true"></div>
+        </div>
+
+        <div class="trio">
+          <div class="card setting-card stagger" style="--i:2">
+            <span class="eyebrow">Hotkey</span>
+            <button class="hotkey" data-hotkey="superPaste"></button>
+            <p class="hint">Click, then press your combo.</p>
+          </div>
+          <div class="card setting-card stagger" style="--i:3">
+            <span class="eyebrow">Between each paste</span>
+            <div class="seg" id="sepSeg">
+              <button data-sep="none">Nothing</button>
+              <button data-sep="enter">Enter</button>
+              <button data-sep="tab">Tab</button>
+              <button data-sep="space">Space</button>
+            </div>
+            <p class="hint" id="sepHint">Pastes land right next to each other.</p>
+          </div>
+          <div class="card setting-card stagger" style="--i:4">
+            <span class="eyebrow">Speed <b id="delayVal">60 ms</b></span>
+            <input type="range" id="delay" min="20" max="400" step="10" class="slider">
+            <div class="slider-labels"><span>Zoomy</span><span>Gentle</span></div>
+          </div>
+        </div>
+
+        <div class="card try stagger" style="--i:5">
+          <div class="section-head tight">
+            <h3>Try it here</h3>
+            <button class="link" id="clearTry">Clear</button>
+          </div>
+          <textarea id="tryArea" placeholder="Copy some text, click in here, then press your Super Paste hotkey ✨"></textarea>
+        </div>
+      </section>
+
+      <!-- ───────────── SETTINGS ───────────── -->
+      <section class="page" data-page="settings">
+        <div class="page-head stagger" style="--i:0">
+          <div><h1>Settings</h1><p class="muted">Make Waddles work just the way you like.</p></div>
+        </div>
+
+        <div class="card settings-group stagger" style="--i:1">
+          <h3><i data-icon="keyboard"></i> Hotkeys</h3>
+          <div class="set-row"><div><b>Snap with saved size</b><span>Opens the frame with your hotkey size</span></div><button class="hotkey" data-hotkey="snap"></button></div>
+          <div class="set-row"><div><b>Free snap</b><span>Draw any size, save it if you like it</span></div><button class="hotkey" data-hotkey="free"></button></div>
+          <div class="set-row"><div><b>Super Paste</b><span>Pastes your clipboard several times</span></div><button class="hotkey" data-hotkey="superPaste"></button></div>
+        </div>
+
+        <div class="card settings-group stagger" style="--i:2">
+          <h3><i data-icon="image"></i> After a snap</h3>
+          <div class="set-row"><div><b>Copy to clipboard</b><span>So you can paste (or Super Paste!) it right away</span></div><label class="switch"><input type="checkbox" data-set="capture.copy"><span class="knob"><i></i></span></label></div>
+          <div class="set-row"><div><b>Save as PNG file</b><span>Every snap is kept in your folder</span></div><label class="switch"><input type="checkbox" data-set="capture.save"><span class="knob"><i></i></span></label></div>
+          <div class="set-row folder-row"><div><b>Screenshots folder</b><span class="path" id="folderPath"></span></div>
+            <div class="row-btns"><button class="btn soft sm" id="changeFolder">Change…</button><button class="btn ghost sm" id="openFolder2"><i data-icon="folder"></i> Open</button></div></div>
+        </div>
+
+        <div class="card settings-group stagger" style="--i:3">
+          <h3><i data-icon="heart"></i> Cuteness</h3>
+          <div class="set-row"><div><b>Penguin pop-ups</b><span>A little note in the corner after each snap and paste</span></div><label class="switch"><input type="checkbox" data-set="ui.toasts"><span class="knob"><i></i></span></label></div>
+          <div class="set-row"><div><b>Sound effects</b><span>Shutter clicks and happy boops</span></div><label class="switch"><input type="checkbox" data-set="ui.sounds"><span class="knob"><i></i></span></label></div>
+        </div>
+
+        <div class="card settings-group stagger" style="--i:4">
+          <h3><i data-icon="gear"></i> App</h3>
+          <div class="set-row"><div><b>Start with Windows</b><span>Waddles waits quietly in the tray</span></div><label class="switch"><input type="checkbox" data-set="startup"><span class="knob"><i></i></span></label></div>
+          <div class="set-row"><div><b>Keep running when closed</b><span>Hotkeys keep working from the tray</span></div><label class="switch"><input type="checkbox" data-set="closeToTray"><span class="knob"><i></i></span></label></div>
+          <div class="set-row"><div><b>Quit completely</b><span>Turns off all hotkeys until you open it again</span></div><button class="btn ghost sm danger" id="quitApp">Quit WaddleSnap</button></div>
+        </div>
+
+        <div class="about stagger" style="--i:5">
+          <span class="about-peng" id="aboutPeng"></span>
+          <span>WaddleSnap <b id="version">1.0.0</b> · made with <i data-icon="heart" class="beat"></i> and fish</span>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- size editor modal -->
+  <div class="modal" id="sizeModal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="sizeModalTitle">
+      <div class="modal-head">
+        <h2 id="sizeModalTitle">New size</h2>
+        <button class="icon-btn" data-close aria-label="Close"><i data-icon="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-form">
+          <label class="field"><span>Name</span><input id="fName" maxlength="32" placeholder="e.g. Instagram post"></label>
+          <div class="dims">
+            <label class="field"><span>Width (px)</span><input id="fW" type="number" min="8" max="16384"></label>
+            <span class="dims-x">×</span>
+            <label class="field"><span>Height (px)</span><input id="fH" type="number" min="8" max="16384"></label>
+          </div>
+          <div class="quick-sizes" id="quickSizes"></div>
+          <p class="warn" id="fWarn" hidden></p>
+        </div>
+        <div class="modal-preview">
+          <div class="pv-frame"><div class="pv-rect" id="pvRect"><span id="pvLabel">1280 × 720</span></div></div>
+          <button class="btn soft sm" id="drawSize"><i data-icon="crop"></i> Draw it on screen</button>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" data-close>Cancel</button>
+        <button class="btn primary" id="saveSize"><i data-icon="check"></i><span>Save size</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="bubble" id="bubble" role="status" aria-live="polite"></div>
+
+  <script src="penguin.js"></script>
+  <script src="sounds.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
