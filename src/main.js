@@ -234,8 +234,12 @@ async function startSnap(mode, opts = {}) {
     Object.assign(snap, { display, image, scale });
 
     const st = store.get();
+    const ls = st.lastSnap;
+    const anchor = mode === 'preset' && st.capture.rememberPosition !== false && ls && ls.displayId === String(display.id)
+      ? { x: ls.xPx / scale, y: ls.yPx / scale } : null;
     ow.webContents.send('overlay:init', {
       mode,
+      anchor,
       image: 'data:image/jpeg;base64,' + image.toJPEG(92).toString('base64'),
       scale,
       imgW: size.width, imgH: size.height,
@@ -284,6 +288,7 @@ ipcMain.on('overlay:done', async (_e, res) => {
     h = Math.max(1, Math.min(h, imgH));
     const x = Math.max(0, Math.min(Math.round(res.rect.x * s.scale), imgW - w));
     const y = Math.max(0, Math.min(Math.round(res.rect.y * s.scale), imgH - h));
+    store.set({ lastSnap: { displayId: String(s.display.id), xPx: x, yPx: y } }); // next snap opens here
     let out = s.image.crop({ x, y, width: w, height: h });
     const got = out.getSize();
     if (got.width !== w || got.height !== h) out = out.resize({ width: w, height: h, quality: 'best' });

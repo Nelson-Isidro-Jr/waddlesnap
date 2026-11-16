@@ -21,7 +21,8 @@ function defaults() {
       superPaste: 'Control+Alt+P',
     },
     superPaste: { enabled: true, count: 3, delay: 60, separator: 'none' },
-    capture: { copy: true, save: true, folder: path.join(app.getPath('pictures'), 'WaddleSnap') },
+    capture: { copy: true, save: true, rememberPosition: true, folder: path.join(app.getPath('pictures'), 'WaddleSnap') },
+    lastSnap: null, // { displayId, xPx, yPx } top-left of the last snap, in screen pixels
     ui: { toasts: true, sounds: true },
     startup: false,
     closeToTray: true,

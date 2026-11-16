@@ -251,6 +251,17 @@ async function presetSnapTest(app, win, tag) {
     const cc = compare(cb, img, 0, 0, 2);
     check(`${tag}: clipboard pixels identical to the saved PNG`, cb.w === img.w && cb.h === img.h && cc.diff === 0, `${cb.w}x${cb.h} diff=${cc.diff} maxDelta=${cc.maxd} (${cd.out})`);
   } else check(`${tag}: clipboard bitmap readable`, false, cd.out);
+  // the next snap opens exactly where this one was taken; switching size keeps it in place
+  const ovB = await waitOverlay(app, () => keys(VK.CTRL, VK.ALT, VK.S));
+  const rB = await selRect(ovB);
+  check(`${tag}: next snap opens where the last one was taken`, Math.abs(rB.x - r2.x) <= 1 && Math.abs(rB.y - r2.y) <= 1 && rB.label.replace(/\s/g, '') === '640×480', JSON.stringify({ last: { x: r2.x, y: r2.y }, now: rB }));
+  await keys(VK.D1);
+  await sleep(450);
+  const rC = await selRect(ovB);
+  check(`${tag}: switching size keeps the frame in place`, rC.label.replace(/\s/g, '') === '1280×720' && Math.abs(rC.x - rB.x) <= 1 && Math.abs(rC.y - rB.y) <= 1, JSON.stringify(rC));
+  await gdi(`${tag}-reopened-same-spot`);
+  await keys(VK.ESC);
+  await sleep(700);
   await hidePattern(app);
 }
 
@@ -311,6 +322,18 @@ async function freeSnapTest(app, win, tag, saveName) {
 
   await step('preset snap @100%', () => presetSnapTest(app, win, 'dpi100'));
   await step('free snap + save size @100%', () => freeSnapTest(app, win, 'dpi100', 'CI Free'));
+
+  await step('remember position can be turned off', async () => {
+    await setState(win, { capture: { rememberPosition: false } });
+    await tool('move', 900, 500);
+    const ov = await waitOverlay(app, () => keys(VK.CTRL, VK.ALT, VK.S));
+    const r = await selRect(ov);
+    const cur = await app.evaluate(({ screen }) => screen.getCursorScreenPoint());
+    check('with the setting off, the frame centres on the mouse', Math.abs(r.x + r.w / 2 - cur.x) <= 2 && Math.abs(r.y + r.h / 2 - cur.y) <= 2, JSON.stringify({ r, cur }));
+    await keys(VK.ESC);
+    await sleep(700);
+    await setState(win, { capture: { rememberPosition: true } });
+  });
 
   await step('custom size from the form', async () => {
     await win.evaluate(() => window.waddle.invoke('state:get'));

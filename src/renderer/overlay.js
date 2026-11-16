@@ -18,6 +18,7 @@
   let drag = null;
   let done = false;
   let naming = false;
+  let atLastSpot = false;   // frame opened at the previous snap's position and hasn't been moved yet
   const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   const px = (dip) => Math.round(dip * cfg.scale);
@@ -53,7 +54,7 @@
     const W = mode === 'preset' && preset ? Math.min(preset.w, cfg.imgW) : px(rect.w);
     const H = mode === 'preset' && preset ? Math.min(preset.h, cfg.imgH) : px(rect.h);
     $('#labelDims').textContent = `${W} × ${H}`;
-    $('#labelName').textContent = mode === 'preset' && preset ? preset.name : (mode === 'define' ? 'new size' : 'free size');
+    $('#labelName').textContent = mode === 'preset' && preset ? preset.name + (atLastSpot ? ' · last spot' : '') : (mode === 'define' ? 'new size' : 'free size');
     label.classList.remove('hide');
     placeFloaters();
     if (!drag || drag.kind !== 'draw') toolbar.classList.remove('hide');
@@ -128,10 +129,13 @@
   function choosePreset(i, animate = true) {
     const p = cfg.presets[i];
     if (!p) return;
-    const cx = rect ? rect.x + rect.w / 2 : cfg.cursor.x, cy = rect ? rect.y + rect.h / 2 : cfg.cursor.y;
     preset = p;
     const s = presetSize(p);
-    rect = clampRect({ x: cx - s.w / 2, y: cy - s.h / 2, w: s.w, h: s.h });
+    let x, y;
+    if (rect) { x = rect.x; y = rect.y; }                                // switching size: top-left corner stays put
+    else if (cfg.anchor) { x = cfg.anchor.x; y = cfg.anchor.y; }       // open exactly where the last snap was taken
+    else { x = cfg.cursor.x - s.w / 2; y = cfg.cursor.y - s.h / 2; }   // no previous snap: centre on the mouse
+    rect = clampRect({ x, y, w: s.w, h: s.h });
     if (animate) { sel.classList.add('morph'); setTimeout(() => sel.classList.remove('morph'), 340); label.classList.remove('pop'); void label.offsetWidth; label.classList.add('pop'); }
     buildToolbar();
     paint();
@@ -193,6 +197,7 @@
     } else if (inside(x, y)) {
       drag = { kind: 'move', dx: x - rect.x, dy: y - rect.y };
     } else if (mode === 'preset') {
+      atLastSpot = false;
       rect = clampRect({ ...rect, x: x - rect.w / 2, y: y - rect.h / 2 });
       drag = { kind: 'move', dx: x - rect.x, dy: y - rect.y };
       paint();
@@ -211,6 +216,7 @@
     $('#guideY').style.left = x + 'px';
     if (!drag) return;
     if (drag.kind === 'move') {
+      atLastSpot = false;
       rect = clampRect({ ...rect, x: x - drag.dx, y: y - drag.dy });
     } else if (drag.kind === 'draw') {
       const x0 = clamp(Math.min(drag.ox, x), 0, VW()), y0 = clamp(Math.min(drag.oy, y), 0, VH());
@@ -268,7 +274,7 @@
     if (mv && rect) {
       e.preventDefault();
       if (mode !== 'preset' && e.altKey) { rect.w = Math.max(4 / cfg.scale, rect.w + mv[0]); rect.h = Math.max(4 / cfg.scale, rect.h + mv[1]); }
-      else { rect.x += mv[0]; rect.y += mv[1]; }
+      else { rect.x += mv[0]; rect.y += mv[1]; atLastSpot = false; }
       rect = clampRect(rect);
       paint();
     }
@@ -288,6 +294,7 @@
     try { await bg.decode(); } catch { /* still show */ }
     if (mode === 'preset') {
       const idx = Math.max(0, data.presets.findIndex(p => p.id === data.activeId));
+      atLastSpot = !!data.anchor;
       choosePreset(idx, false);
     } else {
       rect = null; buildToolbar(); paint();
