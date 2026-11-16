@@ -4,6 +4,7 @@ const {
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { execFile } = require('child_process');
 const { Store, uid } = require('./store');
 const paster = require('./paster');
 
@@ -128,25 +129,52 @@ async function clipboardIsEmpty() {
 
 /* ───────────────────────── capture ───────────────────────── */
 
-// Exact physical pixel size of a display. Electron's DIP sizes are rounded, so
-// size * scaleFactor can be off by one (2560 px at 150% -> 1707 DIP -> 2561 px),
-// which would make the capture get resampled. On Windows ask the OS directly.
-function physicalSize(display) {
+// True pixel size of each monitor, straight from Windows (via the bundled helper).
+// Electron only knows rounded DIP sizes: at 175 % a 1920 px screen is 1098 DIP, and
+// 1098 x 1.75 = 1922, which would make the capture get resampled.
+function nativeMonitors() {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32' || !fs.existsSync(paster.HELPER)) return resolve(null);
+    execFile(paster.HELPER, ['--monitors'], { windowsHide: true, timeout: 2000 }, (err, out) => {
+      if (err) return resolve(null);
+      const list = String(out).trim().split(/\r?\n/)
+        .map(l => l.trim().split(/\s+/).map(Number))
+        .filter(a => a.length === 4 && a.every(Number.isFinite))
+        .map(([l, t, r, b]) => ({ x: l, y: t, w: r - l, h: b - t }));
+      resolve(list.length ? list : null);
+    });
+  });
+}
+
+function physicalSize(display, monitors) {
   const sf = display.scaleFactor || 1;
-  const est = { width: Math.round(display.bounds.width * sf), height: Math.round(display.bounds.height * sf) };
+  const est = { width: Math.round(display.bounds.width * sf), height: Math.round(display.bounds.height * sf), source: 'estimate' };
+  const near = (a, b) => Math.abs(a - b) <= Math.max(3, b * 0.02);
+  if (monitors && monitors.length && typeof screen.screenToDipRect === 'function') {
+    let best = null;
+    for (const m of monitors) {
+      let dip = null;
+      try { dip = screen.screenToDipRect(null, { x: m.x, y: m.y, width: m.w, height: m.h }); } catch { /* skip */ }
+      if (!dip) continue;
+      const d = Math.abs(dip.x - display.bounds.x) + Math.abs(dip.y - display.bounds.y) +
+        Math.abs(dip.width - display.bounds.width) + Math.abs(dip.height - display.bounds.height);
+      if (!best || d < best.d) best = { d, m };
+    }
+    if (best && best.d <= 8 && near(best.m.w, est.width) && near(best.m.h, est.height)) {
+      return { width: best.m.w, height: best.m.h, source: 'os' };
+    }
+  }
   if (process.platform === 'win32' && typeof screen.dipToScreenRect === 'function') {
     try {
       const r = screen.dipToScreenRect(null, display.bounds);
-      // Trust the OS value only when it agrees with Electron's scale (it can disagree when
-      // the scale is overridden, e.g. --force-device-scale-factor); then it is the exact one.
-      if (r && Math.abs(r.width - est.width) <= 3 && Math.abs(r.height - est.height) <= 3) return { width: r.width, height: r.height };
+      if (r && near(r.width, est.width) && near(r.height, est.height)) return { width: r.width, height: r.height, source: 'dip' };
     } catch { /* fall back to the estimate */ }
   }
   return est;
 }
 
-async function captureDisplay(display) {
-  const want = physicalSize(display);
+async function captureDisplay(display, phys) {
+  const want = { width: phys.width, height: phys.height };
   const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: want, fetchWindowIcons: false });
   if (!sources.length) throw new Error('No screens available to capture');
   let src = sources.find(s => s.display_id && String(s.display_id) === String(display.id));
@@ -185,17 +213,18 @@ async function startSnap(mode, opts = {}) {
 
     const cursor = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursor);
+    const monitorsP = nativeMonitors();
     const ow = createOverlay(display);
     overlayWin = ow;
     const loaded = new Promise(r => ow.webContents.once('did-finish-load', r));
-    const image = await captureDisplay(display);
+    const phys = physicalSize(display, await monitorsP);
+    const image = await captureDisplay(display, phys);
     await loaded;
     if (ow.isDestroyed()) throw new Error('overlay closed');
 
     const size = image.getSize();
     // image pixels per CSS px in the overlay: the display's scale factor when the
     // capture came back at full physical resolution (the normal case)
-    const phys = physicalSize(display);
     const scale = (display.scaleFactor || 1) * (size.width / phys.width);
     log('capture', { bounds: display.bounds, sf: display.scaleFactor, phys, img: size, scale });
     Object.assign(snap, { display, image, scale });

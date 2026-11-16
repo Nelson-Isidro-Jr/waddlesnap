@@ -162,10 +162,14 @@
     if (a === 'savesnap') saveAndSnap();
   });
 
+  /* counters read by the automated tests */
+  const dbg = window.__dbg = { down: 0, move: 0, up: 0, keys: 0 };
+
   /* ───────── mouse ───────── */
   const inside = (x, y) => rect && x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
 
   window.addEventListener('mousedown', (e) => {
+    dbg.down++;
     if (done || !cfg) return;
     if (e.button === 2) { cancel(); return; }
     if (e.button !== 0) return;
@@ -188,6 +192,7 @@
   });
 
   window.addEventListener('mousemove', (e) => {
+    dbg.move++;
     if (!cfg || done) return;
     const x = e.clientX, y = e.clientY;
     $('#guideX').style.top = y + 'px';
@@ -214,6 +219,7 @@
   });
 
   window.addEventListener('mouseup', () => {
+    dbg.up++;
     if (!drag) return;
     const wasDraw = drag.kind === 'draw';
     drag = null;
@@ -235,6 +241,7 @@
 
   /* ───────── keyboard ───────── */
   window.addEventListener('keydown', (e) => {
+    dbg.keys++;
     if (!cfg || done) return;
     if (e.key === 'Escape') { e.preventDefault(); return cancel(); }
     if (e.key === 'Enter' || (e.key === ' ' && !naming)) { e.preventDefault(); return doSnap(); }

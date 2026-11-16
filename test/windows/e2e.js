@@ -149,7 +149,14 @@ async function selRect(ov) {
   });
 }
 async function elCenterOnScreen(app, page, selector, urlEnds) {
-  const r = await page.evaluate((s) => { const b = document.querySelector(s).getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; }, selector);
+  const r = await page.evaluate((s) => {
+    const el = document.querySelector(s);
+    el.scrollIntoView({ block: 'center', inline: 'center' });
+    const b = el.getBoundingClientRect();
+    // centre of the part that is actually visible inside the window
+    const l = Math.max(b.left, 0), t = Math.max(b.top, 0), rr = Math.min(b.right, innerWidth), bb = Math.min(b.bottom, innerHeight);
+    return { x: (l + rr) / 2, y: (t + bb) / 2 };
+  }, selector);
   const wb = await app.evaluate(({ BrowserWindow, screen }, u) => {
     const w = BrowserWindow.getAllWindows().find(x => x.webContents.getURL().endsWith(u));
     const b = w.getContentBounds();
@@ -190,10 +197,14 @@ async function presetSnapTest(app, win, tag) {
   const ov = await waitOverlay(app, () => keys(VK.CTRL, VK.ALT, VK.S));
   check(`${tag}: Ctrl+Alt+S opens the snap frame`, true);
   await gdi(`${tag}-overlay-opened`);
-  await keys(0x31 + classic); // real key "3" -> Classic 640x480
+  await keys(VK.D1); // real key "1" -> HD Wide, then "3" -> Classic, proving keys arrive
+  await sleep(450);
+  const r1 = await selRect(ov);
+  await keys(0x31 + classic);
   await sleep(500);
   let r = await selRect(ov);
-  check(`${tag}: real number key switches size (overlay has keyboard focus)`, r.label.replace(/\s/g, '') === '640×480', `label=${r.label}`);
+  const dbg1 = await ov.evaluate(() => ({ ...window.__dbg, focus: document.hasFocus() }));
+  check(`${tag}: real number keys switch size (overlay has keyboard focus)`, r1.label.replace(/\s/g, '') === '1280×720' && r.label.replace(/\s/g, '') === '640×480', `after 1: ${r1.label}, after 3: ${r.label}, overlay=${JSON.stringify(dbg1)}`);
   if (r.label.replace(/\s/g, '') !== '640×480') { await ov.keyboard.press(String(classic + 1)); await sleep(400); r = await selRect(ov); }
   const s = r.scale;
   // real mouse drag: grab the frame centre, drop it so the top-left lands near (150,120) DIP
@@ -202,12 +213,20 @@ async function presetSnapTest(app, win, tag) {
   await tool('drag', from.x, from.y, to.x, to.y);
   await sleep(400);
   const r2 = await selRect(ov);
-  check(`${tag}: real mouse drag moves the frame`, Math.abs(r2.x - 150) < 3 && Math.abs(r2.y - 120) < 3, JSON.stringify(r2));
+  const dbg2 = await ov.evaluate(() => ({ ...window.__dbg, focus: document.hasFocus() }));
+  check(`${tag}: real mouse drag moves the frame`, Math.abs(r2.x - 150) < 3 && Math.abs(r2.y - 120) < 3, JSON.stringify({ r2, from, to, overlay: dbg2 }));
   await gdi(`${tag}-overlay-moved`);
   await keys(VK.ENTER);
   const f = await newFile(dir, before);
-  check(`${tag}: Enter saves a PNG`, !!f, f || 'no file');
-  if (!f) { await ov.keyboard.press('Escape').catch(() => {}); return; }
+  if (!f) {
+    const dbg3 = await ov.evaluate(() => ({ ...window.__dbg, focus: document.hasFocus() })).catch(e => 'overlay gone: ' + e.message);
+    await gdi(`${tag}-enter-did-nothing`);
+    check(`${tag}: Enter saves a PNG`, false, 'no file; overlay=' + JSON.stringify(dbg3));
+    await ov.keyboard.press('Escape').catch(() => {});
+    await hidePattern(app);
+    return;
+  }
+  check(`${tag}: Enter saves a PNG`, true, f);
   await sleep(600);
   await gdi(`${tag}-toast-after-snap`);
   const img = readPng(f), gt = readBmp(gtFile);

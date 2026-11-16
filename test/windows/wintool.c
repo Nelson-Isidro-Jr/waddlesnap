@@ -128,7 +128,9 @@ static int open_clip(void) {
 }
 
 int main(int argc, char **argv) {
-  SetProcessDPIAware();
+  { typedef BOOL (WINAPI *SetCtx)(HANDLE);
+    SetCtx f = (SetCtx)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetProcessDpiAwarenessContext");
+    if (!f || !f((HANDLE)-4)) SetProcessDPIAware(); } /* physical coordinates even after live DPI changes */
   _setmode(_fileno(stdout), _O_BINARY); /* keep \r\n from the app untouched */
   if (argc < 2) return 1;
   const char *cmd = argv[1];

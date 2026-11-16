@@ -3,6 +3,7 @@
  * Presses Ctrl+V <count> times (optionally Enter/Tab/Space between pastes).
  *
  * usage: waddlepaste.exe <count> <delayMs> <none|enter|tab|space> [hotkeyVk]
+ *        waddlepaste.exe --monitors   (prints true monitor pixel rects)
  * exit:  0 ok, 1 bad args, 2 input blocked (target app runs as administrator)
  *
  * Build: x86_64-w64-mingw32-gcc -O2 -s -mwindows -static -o waddlepaste.exe waddlepaste.c
@@ -44,8 +45,34 @@ static void wait_for_release(WORD hotkey_vk) {
   if (n) SendInput(n, ups, sizeof(INPUT));
 }
 
+/* --monitors: print each monitor's true pixel rectangle ("left top right bottom"), one per line.
+   Electron only knows rounded DIP sizes, which can be a pixel or two off at 125/175 % scaling. */
+static BOOL CALLBACK print_monitor(HMONITOR m, HDC dc, LPRECT r, LPARAM lp) {
+  (void)dc; (void)r; (void)lp;
+  MONITORINFOEXW mi; ZeroMemory(&mi, sizeof mi); mi.cbSize = sizeof mi;
+  if (!GetMonitorInfoW(m, (MONITORINFO *)&mi)) return TRUE;
+  DEVMODEW dm; ZeroMemory(&dm, sizeof dm); dm.dmSize = sizeof dm;
+  long w = mi.rcMonitor.right - mi.rcMonitor.left, h = mi.rcMonitor.bottom - mi.rcMonitor.top;
+  if (EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm)) { w = (long)dm.dmPelsWidth; h = (long)dm.dmPelsHeight; }
+  char line[128];
+  int n = wsprintfA(line, "%ld %ld %ld %ld\r\n", mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.left + w, mi.rcMonitor.top + h);
+  DWORD wr; WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), line, n, &wr, NULL);
+  return TRUE;
+}
+
+static void make_per_monitor_aware(void) {
+  typedef BOOL (WINAPI *SetCtx)(HANDLE);
+  SetCtx f = (SetCtx)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetProcessDpiAwarenessContext");
+  if (!f || !f((HANDLE)-4 /* PER_MONITOR_AWARE_V2 */)) SetProcessDPIAware();
+}
+
 int WINAPI WinMain(HINSTANCE h, HINSTANCE p, LPSTR cmd, int show) {
   (void)h; (void)p; (void)cmd; (void)show;
+  make_per_monitor_aware();
+  if (__argc >= 2 && !strcmp(__argv[1], "--monitors")) {
+    EnumDisplayMonitors(NULL, NULL, print_monitor, 0);
+    return 0;
+  }
   if (__argc < 4) return 1;
   int count = atoi(__argv[1]);
   int delay = atoi(__argv[2]);
